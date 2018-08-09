@@ -505,10 +505,9 @@ static VideoFrame *extractVideoFrame(
                     ALOGV("Received an output buffer, timeUs=%lld", (long long)timeUs);
                     sp<MediaCodecBuffer> videoFrameBuffer = outputBuffers.itemAt(index);
 
-                    int32_t width, height, stride;
+                    int32_t width, height;
                     CHECK(outputFormat->findInt32("width", &width));
                     CHECK(outputFormat->findInt32("height", &height));
-                    CHECK(outputFormat->findInt32("stride", &stride));
 
                     int32_t crop_left, crop_top, crop_right, crop_bottom;
                     if (!outputFormat->findRect("crop", &crop_left, &crop_top, &crop_right, &crop_bottom)) {
@@ -550,7 +549,7 @@ static VideoFrame *extractVideoFrame(
                         if (converter.isValid()) {
                             err = converter.convert(
                                     (const uint8_t *)videoFrameBuffer->data(),
-                                    stride, height,
+                                    width, height,
                                     crop_left, crop_top, crop_right, crop_bottom,
                                     frame->mData,
                                     frame->mWidth,
