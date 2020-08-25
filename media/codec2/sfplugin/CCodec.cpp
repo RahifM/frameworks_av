@@ -1286,8 +1286,7 @@ void CCodec::start() {
     {
         Mutexed<Config>::Locked config(mConfig);
         inputFormat = config->mInputFormat;
-        // start triggers format dup
-        outputFormat = config->mOutputFormat = config->mOutputFormat->dup();
+        outputFormat = config->mOutputFormat;
         if (config->mInputSurface) {
             err2 = config->mInputSurface->start();
         }
@@ -1296,8 +1295,6 @@ void CCodec::start() {
         mCallback->onError(err2, ACTION_CODE_FATAL);
         return;
     }
-    // We're not starting after flush.
-    (void)mSentConfigAfterResume.test_and_set();
     err2 = mChannel->start(inputFormat, outputFormat);
     if (err2 != OK) {
         mCallback->onError(err2, ACTION_CODE_FATAL);
@@ -1526,24 +1523,16 @@ void CCodec::flush() {
 }
 
 void CCodec::signalResume() {
-    std::shared_ptr<Codec2Client::Component> comp;
-    auto setResuming = [this, &comp] {
+    auto setResuming = [this] {
         Mutexed<State>::Locked state(mState);
         if (state->get() != FLUSHED) {
             return UNKNOWN_ERROR;
         }
         state->set(RESUMING);
-        comp = state->comp;
         return OK;
     };
     if (tryAndReportOnError(setResuming) != OK) {
         return;
-    }
-
-    mSentConfigAfterResume.clear();
-    {
-        Mutexed<Config>::Locked config(mConfig);
-        config->queryConfiguration(comp);
     }
 
     (void)mChannel->start(nullptr, nullptr);
@@ -1741,7 +1730,7 @@ void CCodec::onMessageReceived(const sp<AMessage> &msg) {
 
             // handle configuration changes in work done
             Mutexed<Config>::Locked config(mConfig);
-            bool changed = !mSentConfigAfterResume.test_and_set();
+            bool changed = false;
             Config::Watcher<C2StreamInitDataInfo::output> initData =
                 config->watch<C2StreamInitDataInfo::output>();
             if (!work->worklets.empty()
@@ -1773,9 +1762,7 @@ void CCodec::onMessageReceived(const sp<AMessage> &msg) {
                     ++stream;
                 }
 
-                if (config->updateConfiguration(updates, config->mOutputDomain)) {
-                    changed = true;
-                }
+                changed = config->updateConfiguration(updates, config->mOutputDomain);
 
                 // copy standard infos to graphic buffers if not already present (otherwise, we
                 // may overwrite the actual intermediate value with a final value)
